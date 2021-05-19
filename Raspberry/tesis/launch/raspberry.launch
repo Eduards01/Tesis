@@ -1,0 +1,4 @@
+<launch> 
+	<node name="escritura" type="arduino_escritura" pkg="tesis" output="screen"/>
+	<node name="lectura" type="arduino_lectura" pkg="tesis"/>
+</launch>

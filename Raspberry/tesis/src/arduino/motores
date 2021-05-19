@@ -1,0 +1,153 @@
+#!/usr/bin/env python
+# license removed for brevity
+import rospy
+import time
+import serial
+import socket
+import RPi.GPIO as GPIO
+
+
+def inicio():
+
+    rospy.init_node('control_motores', anonymous = True)
+
+    TCP_IP = '169.254.162.245'
+    TCP_PORT = 5000
+    BUFFER_SIZE = 36  # Normally 1024, but we want fast response
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((TCP_IP, TCP_PORT))
+
+    GPIO.setmode(GPIO.BOARD)
+    GPIO.setwarnings(False)
+    GPIO.setup(11, GPIO.OUT)
+    GPIO.setup(12, GPIO.OUT)
+    GPIO.setup(13, GPIO.OUT)
+    GPIO.setup(15, GPIO.OUT)
+
+    GPIO.output(11,True)
+    GPIO.output(12,True)
+    GPIO.output(13,True)
+    GPIO.output(15,True)
+    time.sleep(0.1)
+    GPIO.output(11,False)
+    GPIO.output(12,False)
+    GPIO.output(13,False)
+    GPIO.output(15,False)
+    time.sleep(0.1)
+    GPIO.output(11,True)
+    GPIO.output(12,True)
+    GPIO.output(13,True)
+    GPIO.output(15,True)
+
+    ser1 = serial.Serial('/dev/ttyUSB0',4800)
+    ser2 = serial.Serial('/dev/ttyUSB1',4800)
+    ser3 = serial.Serial('/dev/ttyUSB2',4800)
+    ser4 = serial.Serial('/dev/ttyUSB3',4800)
+
+    time.sleep(3)
+    lx = 0.225
+    ly = 0.175
+    r = 0.05
+    i = 0
+
+    velocidad_lineal_anteriorx = 0
+    velocidad_lineal_anteriory = 0
+    velocidad_angular_anterior = 0
+
+    Vlx = "000.0"
+    Vly = "000.0"
+    Wz = "000.0"
+    Pos_x = "000.0"
+    Pos_y = "000.0"
+    Pos_ang = "000.0"
+
+    w1 = "0.0"
+    w2 = "0.0"
+    w3 = "0.0"
+    w4 = "0.0"
+
+    rate = rospy.Rate(100)
+
+    while not rospy.is_shutdown():
+
+	#ser1.write("1"+"\n")
+        #ser2.write("1"+"\n")
+        #ser3.write("1"+"\n")
+        #ser4.write("1"+"\n")
+
+
+	if(ser1.in_waiting>0):
+            line1 = ser1.readline()
+        if(ser2.in_waiting>0):
+            line2 = ser2.readline()
+        if(ser3.in_waiting>0):
+            line3 = ser3.readline()
+        if(ser4.in_waiting>0):
+            line4 = ser4.readline()
+
+	if i > 10:
+
+            velocidad1 = float(line1)
+            velocidad2 = float(line2)
+            velocidad3 = float(line3)
+            velocidad4 = float(line4)
+
+            # Cinematica Directa
+            Vlx = (velocidad1 + velocidad2 + velocidad3 + velocidad4)*r/4
+            Vly = (-velocidad1 + velocidad2 + velocidad3 - velocidad4)*r/4
+            Wz = (-velocidad1 + velocidad2 - velocidad3 + velocidad4)*r /(4*(lx+ly))
+
+            # Posicion Lineal
+            x = Vlx + velocidad_lineal_anteriorx
+            velocidad_lineal_anteriorx = x
+            Pos_x = x*0.1
+
+            y = Vly + velocidad_lineal_anteriory
+            velocidad_lineal_anteriory = y
+            Pos_y = y*0.1
+
+            #Posicion Angular
+            w = Wz + velocidad_angular_anterior
+            velocidad_angular_anterior = w
+            Pos_ang = w*0.1
+
+            if Vlx < 0.0001:
+                Vlx = 0.0
+
+            if Vly < 0.0001:
+                Vly = 0.0
+
+            if Wz < 0.0001:
+                Wz = 0.0
+
+            if Pos_x < 0.0001:
+                Pos_x = 0.0
+
+            if Pos_y < 0.0001:
+                Pos_y = 0.0
+
+            if Pos_ang < 0.0001:
+                Pos_ang = 0.0
+
+            #Convertir en String
+            Vlx = '%.5s' % str(Vlx).zfill(5)
+            Vly = '%.5s' % str(Vly).zfill(5)
+            Wz = '%.5s' % str(Wz).zfill(5)
+            Pos_x = '%.5s' % str(Pos_x).zfill(5)
+            Pos_y = '%.5s' % str(Pos_y).zfill(5)
+            Pos_ang = '%.5s' % str(Pos_ang).zfill(5)
+
+        else:
+            i = i + 1
+        s.send(Vlx+","+Vly+","+Wz+","+Pos_x+","+Pos_y+","+Pos_ang+"\n")
+        data = s.recv(BUFFER_SIZE)
+	w1,w2,w3,w4 = data.split(",")
+    s.close()
+
+
+if __name__ == '__main__':
+    try:
+        inicio()
+    except rospy.ROSInterruptException:
+        pass

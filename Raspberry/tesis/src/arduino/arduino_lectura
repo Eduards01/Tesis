@@ -1,0 +1,166 @@
+#!/usr/bin/env python
+# license removed for brevity
+import rospy
+import time
+import serial
+import socket
+import RPi.GPIO as GPIO
+import numpy as np
+
+def inicio():
+    rospy.init_node('lectura_arduino', anonymous = True)
+    GPIO.setmode(GPIO.BOARD)
+    GPIO.setwarnings(False)
+    GPIO.setup(11, GPIO.OUT)
+    GPIO.setup(12, GPIO.OUT)
+    GPIO.setup(13, GPIO.OUT)
+    GPIO.setup(15, GPIO.OUT)
+
+    GPIO.output(11,True)
+    GPIO.output(12,True)
+    GPIO.output(13,True)
+    GPIO.output(15,True)
+    time.sleep(0.1)
+    GPIO.output(11,False)
+    GPIO.output(12,False)
+    GPIO.output(13,False)
+    GPIO.output(15,False)
+    time.sleep(0.1)
+    GPIO.output(11,True)
+    GPIO.output(12,True)
+    GPIO.output(13,True)
+    GPIO.output(15,True)
+
+    ser1 = serial.Serial('/dev/ttyUSB0',4800)
+    ser2 = serial.Serial('/dev/ttyUSB1',4800)
+    ser3 = serial.Serial('/dev/ttyUSB2',4800)
+    ser4 = serial.Serial('/dev/ttyUSB3',4800)
+
+    Vlx = "00000"
+    Vly = "00000"
+    Wz = "00000"
+    Pos_x = "00000"
+    Pos_y = "00000"
+    Pos_ang = "00000"
+
+    lx = 0.225
+    ly = 0.175
+    r = 0.05
+    i = 0
+
+    velocidad_lineal_anteriorx = 0
+    velocidad_lineal_anteriory = 0
+    velocidad_angular_anterior = 0
+
+    line1 = "0"
+    line2 = "0"
+    line3 = "0"
+    line4 = "0"
+
+    TCP_IP = '169.254.162.245'
+    TCP_PORT = 5000
+    BUFFER_SIZE = 36  # Normally 1024, but we want fast response
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.connect((TCP_IP, TCP_PORT))
+
+    f1 = open('v1.txt','w')
+    f2 = open('v2.txt','w')
+    f3 = open('v3.txt','w')
+    f4 = open('v4.txt','w')
+
+    while not rospy.is_shutdown():
+
+	if(ser1.in_waiting>0):
+            line1 = ser1.readline()
+        if(ser2.in_waiting>0):
+            line2 = ser2.readline()
+        if(ser3.in_waiting>0):
+            line3 = ser3.readline()
+        if(ser4.in_waiting>0):
+            line4 = ser4.readline()
+
+
+        if i > 100: #type(float(line1)) == type(1.5)  and type(float(line2)) == type(1.5) and type(float(line3)) == type(1.5) and type(float(line4)) == type(1.5):
+
+	    f1.write(line1)
+            f2.write(line2)
+            f3.write(line3)
+            f4.write(line4)
+
+            velocidad1 = float(line1)
+            velocidad2 = float(line2)
+            velocidad3 = float(line3)
+            velocidad4 = float(line4)
+
+            # Cinematica Directa
+            Vlx = (velocidad1 + velocidad2 + velocidad3 + velocidad4)*r/4
+            Vly = (-velocidad1 + velocidad2 + velocidad3 - velocidad4)*r/4
+            Wz = (-velocidad1 + velocidad2 - velocidad3 + velocidad4)*r /(4*(lx+ly))
+
+            # Orientacion Angular
+            w = Wz + velocidad_angular_anterior
+            velocidad_angular_anterior = w
+            Pos_ang = w*0.1/7.696
+
+            # Proyeccion de velocidades
+
+	    Vx_i = Vlx*np.cos(Pos_ang) - Vly*np.sin(Pos_ang)
+	    Vy_i = Vlx*np.sin(Pos_ang) + Vly*np.cos(Pos_ang)
+
+            # Posicion Lineal
+            x = Vx_i + velocidad_lineal_anteriorx
+            velocidad_lineal_anteriorx = x
+            Pos_x = x*0.1/7.696
+
+            y = Vy_i + velocidad_lineal_anteriory
+            velocidad_lineal_anteriory = y
+            Pos_y = y*0.1/7.696
+
+
+            if Vlx < 0.0001 and Vlx > -0.0001:
+                Vlx = 0.0
+
+            if Vly < 0.0001 and Vly > -0.0001:
+                Vly = 0.0
+
+            if Wz < 0.0001 and Wz > -0.0001:
+                Wz = 0.0
+
+            if Pos_x < 0.0001 and Pos_x > -0.0001:
+                Pos_x = 0.0
+
+            if Pos_y < 0.0001 and Pos_y > -0.0001:
+                Pos_y = 0.0
+
+            if Pos_ang < 0.0001 and Pos_ang > -0.0001:
+                Pos_ang = 0.0
+
+            #Convertir en String
+            Vlx = '%.5s' % str(Vlx).zfill(5)
+            Vly = '%.5s' % str(Vly).zfill(5)
+            Wz = '%.5s' % str(Wz).zfill(5)
+            Pos_x = '%.5s' % str(Pos_x).zfill(5)
+            Pos_y = '%.5s' % str(Pos_y).zfill(5)
+            Pos_ang = '%.5s' % str(Pos_ang).zfill(5)
+	    #s.send(Vlx+","+Vly+","+Wz+","+Pos_x+","+Pos_y+","+Pos_ang+"\n")
+        else:
+            i = i + 1
+	    time.sleep(0.01)
+	s.send(Vlx+","+Vly+","+Wz+","+Pos_x+","+Pos_y+","+Pos_ang+"\n")
+
+	#print(Vlx)
+    f1.close()
+    f2.close()
+    f3.close()
+    f4.close()
+
+
+    s.close()
+
+
+if __name__ == '__main__':
+    try:
+        inicio()
+    except rospy.ROSInterruptException:
+        pass

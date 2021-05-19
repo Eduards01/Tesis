@@ -1,0 +1,92 @@
+#!/usr/bin/env python
+# license removed for brevity
+import rospy
+import time
+import serial
+import socket
+from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Pose
+
+def inicio():
+
+    rospy.init_node('motores_tcp', anonymous = True)
+
+    TCP_IP = '169.254.162.245'
+    TCP_PORT = 5000
+    BUFFER_SIZE = 36  # Normally 1024, but we want fast response
+
+    velocidad_pub = rospy.Publisher('/velocidades',Twist, queue_size = 5)
+    posicion_pub = rospy.Publisher('/posicion',Pose, queue_size = 5)
+
+    vel_msg = Twist()
+    pos_msg = Pose()
+
+    vel_msg.linear.x = 0
+    vel_msg.linear.y = 0
+    vel_msg.angular.z = 0
+
+    pos_msg.position.x = 0
+    pos_msg.position.y = 0
+    pos_msg.orientation.w = 0
+
+    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s.bind((TCP_IP, TCP_PORT))
+    s.listen(1)
+
+
+    conn, addr = s.accept()
+    print 'Connection address:', addr
+
+    rate = rospy.Rate(4800)
+    while not rospy.is_shutdown():
+
+	data = conn.recv(BUFFER_SIZE)
+        if not data: break
+	rospy.loginfo(data)
+
+	Vlx, Vly, Wz, Pos_x, Pos_y, Pos_ang = data.split(",")
+
+        if  Vlx == "000.0":
+            Vlx = 0
+
+        if  Vly == "000.0":
+            Vly = 0
+
+        if  Wz == "000.0":
+            Wz = 0
+
+        if  Pos_x == "000.0":
+            Pos_x = 0
+
+        if  Pos_y == "000.0":
+            Pos_y = 0
+
+        if  Pos_ang == "000.0":
+            Pos_ang = 0
+
+	Vlx = float(Vlx)
+        Vly = float(Vly)
+        Wz = float(Wz)
+        Pos_x = float(Pos_x)
+        Pos_y = float(Pos_y)
+        Pos_ang = float(Pos_ang)
+
+        vel_msg.linear.x = Vlx
+        vel_msg.linear.y = Vly
+        vel_msg.angular.z = Wz
+
+        pos_msg.position.x = Pos_x
+        pos_msg.position.y = Pos_y
+        pos_msg.orientation.w = Pos_ang
+
+        velocidad_pub.publish(vel_msg)
+        posicion_pub.publish(pos_msg)
+
+	rate.sleep()
+    conn.close()
+
+if __name__ == '__main__':
+    try:
+        inicio()
+    except rospy.ROSInterruptException:
+        pass

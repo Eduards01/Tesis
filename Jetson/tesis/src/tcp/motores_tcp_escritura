@@ -1,0 +1,79 @@
+#!/usr/bin/env python
+# license removed for brevity
+import rospy
+import time
+import serial
+import socket
+from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Pose
+
+global w1, w2, w3, w4, w5
+
+w1 = "0"
+w2 = "0"
+w3 = "0"
+w4 = "0"
+w5 = "0"
+
+def callback_velocities(data):
+    global w1, w2, w3, w4
+
+    Vl_x = data.linear.x
+    Vl_y = data.linear.y
+    W_z = data.angular.z
+
+    lx = 0.225
+    ly = 0.175
+    r = 0.05
+
+    w1 = str(1/r*(Vl_x-Vl_y-(lx+ly)*W_z))
+    w2 = str(1/r*(Vl_x+Vl_y+(lx+ly)*W_z))
+    w3 = str(1/r*(Vl_x+Vl_y-(lx+ly)*W_z))
+    w4 = str(1/r*(Vl_x-Vl_y+(lx+ly)*W_z))
+    w5 = "0"
+
+def inicio():
+
+    global w1, w2, w3, w4, w5
+    rospy.init_node('motores_tcp_escritura', anonymous = True)
+
+    TCP_IP = '169.254.162.245'
+    TCP_PORT1 = 5001
+    BUFFER_SIZE = 30  # Normally 1024, but we want fast response
+
+    rospy.Subscriber('/cmd_vel', Twist, callback_velocities)
+
+    s1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    s1.bind((TCP_IP, TCP_PORT1))
+    s1.listen(1)
+
+    conn1, addr1 = s1.accept()
+    print 'Connection address:', addr1
+    w1 = "0"
+    w2 = "0"
+    w3 = "0"
+    w4 = "0"
+    w5 = "0"
+
+    rate = rospy.Rate(100)
+
+    while not rospy.is_shutdown():
+
+        w1 = str(w1).zfill(5)
+        w2 = str(w2).zfill(5)
+        w3 = str(w3).zfill(5)
+        w4 = str(w4).zfill(5)
+	w5 = str(w5).zfill(5)
+
+        velocidades_angulares = w1+","+w2+","+w3+","+w4+","+w5+"\n"
+        conn1.send(velocidades_angulares)
+	rospy.loginfo(len(velocidades_angulares))
+	time.sleep(0.1)
+
+    conn1.close()
+
+if __name__ == '__main__':
+    try:
+        inicio()
+    except rospy.ROSInterruptException:
+        pass

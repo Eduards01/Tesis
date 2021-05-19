@@ -1,0 +1,5 @@
+<launch>
+        <node name="motores" type="motores_tcp_lectura" pkg="tesis"  />
+	<node name="motores1" type="motores_tcp_escritura" pkg="tesis" output="screen" />
+	<node name="test_odometry" type="test_odometry" pkg="tesis" />
+</launch>
